@@ -380,6 +380,18 @@ Set-RegistryValue 'HKLM\SYSTEM\CurrentControlSet\Control\CrashControl' 'CrashDum
 Set-RegistryValue 'HKLM\SOFTWARE\Policies\Microsoft\Windows NT\SystemRestore' 'DisableSR' 'REG_DWORD' '1'
 Set-ServiceStartupType 'SysMain'
 
+Write-Host "Setting Windows Update to manual mode (no automatic download/install)..."
+# NoAutoUpdate=1 disables automatic updating: updates are only downloaded and
+# installed when you explicitly open Settings > Windows Update and click
+# "Check for updates". This also stops the automatic update notifications.
+# To restore the default behavior, set NoAutoUpdate=0 or delete the key.
+Set-RegistryValue 'HKLM\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate\AU' 'NoAutoUpdate' 'REG_DWORD' '1'
+Set-RegistryValue 'HKLM\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate\AU' 'NoAutoRebootWithLoggedOnUsers' 'REG_DWORD' '1'
+# Make sure the Windows Update page stays usable, so manual checks still work.
+Set-RegistryValue 'HKLM\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate' 'DisableWindowsUpdateAccess' 'REG_DWORD' '0'
+# Do not run update work before the first sign-in (useful for VMs).
+Set-RegistryValue 'HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\WindowsUpdate\Orchestrator' 'ScanBeforeInitialLogonAllowed' 'REG_DWORD' '0'
+
 Write-Host "Re-disabling telemetry scheduled tasks..."
 $tasksToDisable = @(
     "Microsoft\Windows\Application Experience\Microsoft Compatibility Appraiser",

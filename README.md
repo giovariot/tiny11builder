@@ -151,6 +151,8 @@ privacy/AI policies and the disk-space tweaks, disables the telemetry
 services/tasks and finishes with
 `DISM /Online /Cleanup-Image /StartComponentCleanup /ResetBase`.
 
+It also switches **Windows Update to manual mode**: `NoAutoUpdate=1` under `HKLM\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate\AU` disables automatic download/install (and the automatic update notifications), while the Windows Update page stays usable so you can still install updates on demand from **Settings → Windows Update → Check for updates**. To go back to automatic updates, set `NoAutoUpdate=0` or delete that key. Recommended workflow: run this script once, then when you decide to update, open Windows Update, install, reboot, run this script again and reboot.
+
 Limits: Edge removal is **best effort and unsupported by Microsoft** (Windows
 Update may bring it back — just run the script again), and it cannot rebuild
 WinSxS (that only works on a mounted image). Reboot when it finishes.
