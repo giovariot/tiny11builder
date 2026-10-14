@@ -19,9 +19,7 @@ if (! $myWindowsPrincipal.IsInRole($adminRole))
 {
     $scriptPath = if ($PSCommandPath) { $PSCommandPath } else { $myInvocation.MyCommand.Definition }
     if ($scriptPath -like '\\*') {
-        Write-Host "WARNING: this script is running from a network/UNC path:" -ForegroundColor Yellow
-        Write-Host "  $scriptPath" -ForegroundColor Yellow
-        Write-Host "Copy the whole folder to the local disk (e.g. C:\) and run it from there." -ForegroundColor Yellow
+        Write-Host "WARNING: running from a network path; the build writes large files. A local disk (e.g. C:\) is recommended." -ForegroundColor Yellow
     }
     Write-Host "Restarting Tiny11 image creator as admin in a new window, you can close this one."
     $newProcess = new-object System.Diagnostics.ProcessStartInfo "PowerShell";

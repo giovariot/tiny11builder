@@ -30,10 +30,9 @@ function Set-RegistryValue {
         [string]$type,
         [string]$value
     )
-    try {
-        & 'reg' 'add' $path '/v' $name '/t' $type '/d' $value '/f' | Out-Null
-    } catch {
-        Write-Host "  Error setting ${path}\${name}: $_"
+    & 'reg' 'add' $path '/v' $name '/t' $type '/d' $value '/f' 2>&1 | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "  (not set: ${path}\${name})" -ForegroundColor DarkGray
     }
 }
 
@@ -77,11 +76,6 @@ $myWindowsPrincipal = New-Object System.Security.Principal.WindowsPrincipal($myW
 $adminRole = [System.Security.Principal.WindowsBuiltInRole]::Administrator
 if (! $myWindowsPrincipal.IsInRole($adminRole)) {
     $scriptPath = if ($PSCommandPath) { $PSCommandPath } else { $myInvocation.MyCommand.Definition }
-    if ($scriptPath -like '\\*') {
-        Write-Host "WARNING: this script is running from a network/UNC path:" -ForegroundColor Yellow
-        Write-Host "  $scriptPath" -ForegroundColor Yellow
-        Write-Host "Copy the whole folder to the local disk (e.g. C:\) and run it from there." -ForegroundColor Yellow
-    }
     Write-Host "Restarting tiny11 in-place maintenance as admin in a new window, you can close this one."
     $newProcess = New-Object System.Diagnostics.ProcessStartInfo "PowerShell"
     $newProcess.Arguments = "-NoProfile -ExecutionPolicy Bypass -File `"$scriptPath`""
@@ -171,16 +165,16 @@ $provisioned = Get-AppxProvisionedPackage -Online -ErrorAction SilentlyContinue
 foreach ($app in $provisioned) {
     if (Test-BloatPackage $app.PackageName) {
         Write-Host "  Removing provisioned $($app.PackageName)"
-        Remove-AppxProvisionedPackage -Online -PackageName $app.PackageName -ErrorAction SilentlyContinue | Out-Null
+        try { Remove-AppxProvisionedPackage -Online -PackageName $app.PackageName -ErrorAction Stop | Out-Null } catch { }
     }
 }
 
 Write-Host "Removing installed apps for all users..."
 $installed = Get-AppxPackage -AllUsers -ErrorAction SilentlyContinue
 foreach ($app in $installed) {
-    if (Test-BloatPackage $app.Name) {
+    if ((Test-BloatPackage $app.Name) -and -not $app.NonRemovable) {
         Write-Host "  Removing $($app.Name)"
-        Remove-AppxPackage -Package $app.PackageFullName -AllUsers -ErrorAction SilentlyContinue
+        try { Remove-AppxPackage -Package $app.PackageFullName -AllUsers -ErrorAction Stop } catch { }
     }
 }
 
@@ -212,16 +206,16 @@ foreach ($edgeAppDir in $edgeApplicationDirs) {
 
 # Remove the Edge appx (Stable) if present.
 Get-AppxProvisionedPackage -Online -ErrorAction SilentlyContinue |
-    Where-Object { $_.PackageName -like "*MicrosoftEdge*" } |
+    Where-Object { $_.PackageName -like "Microsoft.MicrosoftEdge*" } |
     ForEach-Object {
         Write-Host "  Removing provisioned $($_.PackageName)"
-        Remove-AppxProvisionedPackage -Online -PackageName $_.PackageName -ErrorAction SilentlyContinue | Out-Null
+        try { Remove-AppxProvisionedPackage -Online -PackageName $_.PackageName -ErrorAction Stop | Out-Null } catch { }
     }
 Get-AppxPackage -AllUsers -ErrorAction SilentlyContinue |
-    Where-Object { $_.Name -like "*MicrosoftEdge*" } |
+    Where-Object { $_.Name -like "Microsoft.MicrosoftEdge*" } |
     ForEach-Object {
         Write-Host "  Removing $($_.Name)"
-        Remove-AppxPackage -Package $_.PackageFullName -AllUsers -ErrorAction SilentlyContinue
+        try { Remove-AppxPackage -Package $_.PackageFullName -AllUsers -ErrorAction Stop } catch { }
     }
 
 # Leftovers: Edge, EdgeUpdate, EdgeCore and WebView2.
@@ -312,7 +306,8 @@ $languagePackagePatterns = @(
 $allPackages = & dism /Online /English /Get-Packages /Format:Table
 $allPackages = $allPackages -split "`n" | Select-Object -Skip 1
 foreach ($packagePattern in $languagePackagePatterns) {
-    $languagePackages = $allPackages | Where-Object { $_ -like "$packagePattern*" }
+    # Skip superseded/removed entries: trying to remove them fails with 0x800f0805.
+    $languagePackages = $allPackages | Where-Object { $_ -like "$packagePattern*" -and ($_ -split "\s+")[1] -notmatch 'Superseded|Removed' }
     foreach ($languagePackage in $languagePackages) {
         $languagePackageIdentity = ($languagePackage -split "\s+")[0]
         Write-Host "  Removing $languagePackageIdentity..."
