@@ -18,8 +18,9 @@ This script generates a significantly reduced Windows 11 image. However, **it's 
 ---
 
 ## ⚠️ Script versions:
-- **tiny11maker.ps1** : The regular script, which removes a lot of bloat but keeps the system serviceable. You can add languages, updates, and features post-creation. This is the recommended script for regular use.
+- **tiny11maker.ps1** : The regular script, which removes a lot of bloat but keeps the system serviceable. You can add languages, updates, and features post-creation. This is the recommended script for regular use. It now also removes the optional language features (Handwriting, OCR, Speech, TextToSpeech) while keeping Windows Defender enabled.
 - ⚠️ **tiny11coremaker.ps1** : The core script, which removes even more bloat but also removes the ability to service the image. You cannot add languages, updates, or features post-creation. This is recommended for quick testing or development use.
+- 🧹 **tiny11maker-inplace.ps1** : A maintenance script to run **inside an already installed tiny11maker system, after Windows Update**. It removes the bloat/AI apps that updates reinstall, removes the language features again if they come back, removes **Edge and OneDrive** (best effort) and blocks Edge from being reinstalled, re-applies the AI/privacy policies and reclaims space with `DISM /Online /Cleanup-Image /StartComponentCleanup /ResetBase`. It does not touch Defender and does not rebuild WinSxS (only possible offline). Safe to run periodically.
 
 ## Instructions:
 1. Download Windows 11 from the [Microsoft website](https://www.microsoft.com/software-download/windows11) or [Rufus](https://github.com/pbatard/rufus)
@@ -77,6 +78,7 @@ C:/path/to/your/tiny11/script.ps1 -ISO <letter> -SCRATCH <letter>
           <li>Tablet PC Math</li>
           <li>Edge</li>
           <li>OneDrive</li>
+          <li>Language features (Handwriting, OCR, Speech, TextToSpeech)</li>
         </ul>
       </td>
       <td>
@@ -92,6 +94,67 @@ C:/path/to/your/tiny11/script.ps1 -ISO <letter> -SCRATCH <letter>
   </tbody>
 </table>
 
+### AI, privacy and telemetry hardening (both scripts)
+
+Beyond the classic bloat, both scripts now also remove or disable the newer
+Windows "AI" and data-collection features:
+
+- **Removed apps**: Copilot / Copilot+ providers, Windows Web Experience Pack
+  (Widgets), Phone Link / Cross Device, Start experiences, Bing search in the
+  Start menu, Dev Home, Outlook (new) and Teams.
+- **AI features disabled by policy** (registry, works even when the app is kept):
+  Recall and snapshot saving (`DisableAIDataAnalysis`, `AllowRecallEnablement`),
+  Click to Do (`DisableClickToDo`), Settings agentic search
+  (`DisableSettingsAgent`), Paint Cocreator / generative fill / image creator,
+  Notepad AI (`DisableAIFeatures`) and Windows Copilot.
+- **Recall component removed** in tiny11 Core (`/Disable-Feature /FeatureName:Recall /Remove`).
+- **Hidden data collection turned off**: diagnostic data, advertising ID,
+  activity history / timeline, error reporting / CEIP, customer feedback and
+  the telemetry services (`DiagTrack`, `dmwappushservice`, `DPS`,
+  `WdiServiceHost`, `WdiSystemHost`, `WerSvc`, `PcaSvc`).
+- **Web results disabled** in Start / search and Cortana.
+
+### Optimized for virtual machines (Apple Silicon / Arm64)
+
+The scripts default to a configuration that is lean on disk, which is handy for
+VMs (Parallels, VMware Fusion, UTM) on Apple Silicon Macs:
+
+- Hibernation is disabled (no multi-GB `hiberfil.sys`).
+- Kernel crash dumps are disabled.
+- System Restore / Shadow Copies are disabled.
+- `SysMain` (Superfetch) is disabled to reduce background disk I/O.
+- The unattended file is rewritten to the detected architecture
+  (`amd64`/`arm64`), so the `Compact` install and OOBE bypass apply on Arm too.
+
+> Note for Arm64: tiny11 Core previously had several bugs that broke the Arm
+> path: `$ScratchDisk` was never assigned (so registry loading, the WinSxS
+> rebuild and the ISO creation all failed), the arm64 WinSxS copy list was
+> missing its commas, the arm64 Edge WebView cleanup redirected the folder list
+> into a file instead of a variable, and `autounattend.xml` was never placed at
+> the root of the ISO. All of these are fixed here.
+
+### Post-update cleanup (tiny11maker, online)
+
+Windows Update periodically reinstalls some of the apps and features that
+tiny11maker removed (this is the "ongoing battle" mentioned in *Known issues*).
+`tiny11maker-inplace.ps1` re-applies the trimming to a running installation:
+
+1. Boot the VM and open **PowerShell 5.1 as Administrator**.
+2. `Set-ExecutionPolicy Bypass -Scope Process`
+3. `C:/path/to/tiny11maker-inplace.ps1`
+
+It removes provisioned and installed bloat/AI apps, removes the language
+features again if they came back, uninstalls **Microsoft Edge** with its own
+`setup.exe --uninstall --system-level --force-uninstall` and removes **OneDrive**
+(best effort), blocks EdgeUpdate from reinstalling Edge/WebView2, re-applies the
+privacy/AI policies and the disk-space tweaks, disables the telemetry
+services/tasks and finishes with
+`DISM /Online /Cleanup-Image /StartComponentCleanup /ResetBase`.
+
+Limits: Edge removal is **best effort and unsupported by Microsoft** (Windows
+Update may bring it back — just run the script again), and it cannot rebuild
+WinSxS (that only works on a mounted image). Reboot when it finishes.
+
 Keep in mind that **you cannot add back features in tiny11 core**! <br>
 You will be asked during image creation if you want to enable .net 3.5 support!
 
@@ -102,6 +165,7 @@ You will be asked during image creation if you want to enable .net 3.5 support!
 - You might have to update Winget before being able to install any apps, using Microsoft Store.
 - Outlook and Dev Home might reappear after some time. This is an ongoing battle, though the latest script update tries to prevent this more aggressively.
 - If you are using this script on arm64, you might see a glimpse of an error while running the script. This is caused by the fact that the arm64 image doesn't have OneDriveSetup.exe included in the System32 folder.
+- During image export DISM can fail with **Error 8 (not enough memory)** on machines with little RAM. The scripts now retry with `/Compress:max` and, if that fails too, **keep the modified `install.wim`** (it already contains all the tiny11 changes) instead of deleting it: the ISO is still a trimmed tiny11, just a bit larger, instead of ending up ~0.9 GB and image-less. Before writing the ISO they also check that the install image exists/looks valid and that there is enough free space on the output drive, and they verify the `oscdimg` result; otherwise they stop with a clear error. For the smallest ISO, give the build machine **8+ GB RAM (12–16 GB recommended)** and ~50 GB of free disk.
 
 ---
 
