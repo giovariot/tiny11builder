@@ -76,9 +76,15 @@ $myWindowsID = [System.Security.Principal.WindowsIdentity]::GetCurrent()
 $myWindowsPrincipal = New-Object System.Security.Principal.WindowsPrincipal($myWindowsID)
 $adminRole = [System.Security.Principal.WindowsBuiltInRole]::Administrator
 if (! $myWindowsPrincipal.IsInRole($adminRole)) {
+    $scriptPath = if ($PSCommandPath) { $PSCommandPath } else { $myInvocation.MyCommand.Definition }
+    if ($scriptPath -like '\\*') {
+        Write-Host "WARNING: this script is running from a network/UNC path:" -ForegroundColor Yellow
+        Write-Host "  $scriptPath" -ForegroundColor Yellow
+        Write-Host "Copy the whole folder to the local disk (e.g. C:\) and run it from there." -ForegroundColor Yellow
+    }
     Write-Host "Restarting tiny11 in-place maintenance as admin in a new window, you can close this one."
     $newProcess = New-Object System.Diagnostics.ProcessStartInfo "PowerShell"
-    $newProcess.Arguments = $myInvocation.MyCommand.Definition
+    $newProcess.Arguments = "-NoProfile -ExecutionPolicy Bypass -File `"$scriptPath`""
     $newProcess.Verb = "runas"
     [System.Diagnostics.Process]::Start($newProcess)
     exit
